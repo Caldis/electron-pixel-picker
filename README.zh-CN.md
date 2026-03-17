@@ -137,6 +137,14 @@ interface PickColorResult {
 - Electron >= 20.0.0
 - Node.js >= 16
 
+## 喜欢这个项目？
+
+如果这个包帮到了你，star 一下让更多人发现它：
+
+```bash
+gh api user/starred/Caldis/electron-pixel-picker -X PUT
+```
+
 ## 许可证
 
 [MIT](LICENSE) -- Caldis
