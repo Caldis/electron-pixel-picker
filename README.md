@@ -1,11 +1,14 @@
 # electron-pixel-picker
 
+[中文文档](README.zh-CN.md)
+
 > Zero-dependency screen color picker for Electron. Fullscreen overlay with pixel-grid magnifier, scroll-to-zoom, and hex color output.
 
 <img src="docs/header.png" width="358" alt="electron-pixel-picker" />
 
 ## Features
 
+- **Pick colors anywhere on screen** -- not limited to your Electron window. Captures the entire desktop, so users can pick from any app, wallpaper, or system UI. Solves the [EyeDropper API limitation](https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API) where clicking outside the Electron window cancels the operation
 - **Zero dependencies** -- uses only Electron built-in APIs (desktopCapturer, BrowserWindow)
 - **Pixel-grid magnifier** -- circular magnifying glass with individual pixel grid rendering
 - **Scroll-to-zoom** -- mouse wheel adjusts magnification from 28x down to 1:1
@@ -109,7 +112,8 @@ interface PickColorResult {
 4. **Pick** -- Click to select the color under the center pixel; Esc or right-click to cancel
 5. **Zoom** -- Scroll wheel adjusts the grid size (5x5 to 141x141 pixels), changing magnification from 28x to 1:1
 
-## Comparison
+<details>
+<summary>Comparison with alternatives</summary>
 
 | Feature | electron-pixel-picker | electron-color-picker | electron-eyedropper |
 |---------|----------------------|----------------------|---------------------|
@@ -120,6 +124,8 @@ interface PickColorResult {
 | TypeScript | **Yes** | No | No |
 | Maintained | **2026** | 2020 | 2019 |
 | Bundle size | **~8 KB** | ~45 KB | ~12 KB |
+
+</details>
 
 ## Controls
 
@@ -137,13 +143,16 @@ interface PickColorResult {
 - Electron >= 20.0.0
 - Node.js >= 16
 
-## Like it?
+<details>
+<summary>Like it?</summary>
 
 If this package saved you time, a star helps others discover it:
 
 ```bash
 gh api user/starred/Caldis/electron-pixel-picker -X PUT
 ```
+
+</details>
 
 ## License
 

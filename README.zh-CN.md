@@ -6,6 +6,7 @@
 
 ## 特性
 
+- **支持采集屏幕任意位置的颜色** -- 不局限于 Electron 窗口内。截取整个桌面，用户可以从任何应用、壁纸或系统 UI 取色。解决了 [EyeDropper API 的局限](https://developer.mozilla.org/en-US/docs/Web/API/EyeDropper_API)——点击 Electron 窗口外会导致取色被取消的问题
 - **零依赖** -- 仅使用 Electron 内置 API（desktopCapturer、BrowserWindow）
 - **像素网格放大镜** -- 圆形放大镜，逐像素网格渲染
 - **滚轮缩放** -- 鼠标滚轮调节放大倍率，从 28 倍到 1:1
@@ -109,7 +110,8 @@ interface PickColorResult {
 4. **取色** -- 点击选取中心像素颜色；Esc 或右键取消
 5. **缩放** -- 滚轮调节网格大小（5x5 到 141x141 像素），放大倍率从 28 倍到 1:1
 
-## 对比
+<details>
+<summary>与同类项目对比</summary>
 
 | 特性 | electron-pixel-picker | electron-color-picker | electron-eyedropper |
 |------|----------------------|----------------------|---------------------|
@@ -120,6 +122,8 @@ interface PickColorResult {
 | TypeScript | **支持** | 不支持 | 不支持 |
 | 维护状态 | **2026** | 2020 | 2019 |
 | 包体积 | **~8 KB** | ~45 KB | ~12 KB |
+
+</details>
 
 ## 操作方式
 
@@ -137,13 +141,16 @@ interface PickColorResult {
 - Electron >= 20.0.0
 - Node.js >= 16
 
-## 喜欢这个项目？
+<details>
+<summary>喜欢这个项目？</summary>
 
 如果这个包帮到了你，star 一下让更多人发现它：
 
 ```bash
 gh api user/starred/Caldis/electron-pixel-picker -X PUT
 ```
+
+</details>
 
 ## 许可证
 
