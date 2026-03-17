@@ -2,7 +2,7 @@
 
 > 零依赖的 Electron 屏幕取色器。全屏覆盖层 + 像素网格放大镜 + 滚轮缩放 + Hex 颜色输出。
 
-![electron-pixel-picker](docs/header.png)
+<img src="docs/header.png" width="358" alt="electron-pixel-picker" />
 
 ## 特性
 
