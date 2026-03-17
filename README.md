@@ -2,7 +2,7 @@
 
 > Zero-dependency screen color picker for Electron. Fullscreen overlay with pixel-grid magnifier, scroll-to-zoom, and hex color output.
 
-![Demo](docs/demo.gif)
+![electron-pixel-picker](docs/header.png)
 
 ## Features
 
