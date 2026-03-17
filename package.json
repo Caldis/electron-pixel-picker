@@ -1,0 +1,27 @@
+{
+  "name": "electron-pixel-picker",
+  "version": "1.0.0",
+  "description": "Zero-dependency screen color picker for Electron. Fullscreen overlay with pixel-grid magnifier, scroll-to-zoom, and hex color output.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/", "src/overlay.html"],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": ["electron", "color-picker", "eyedropper", "screen", "pixel", "magnifier", "desktop-capturer"],
+  "author": "Caldis",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Caldis/electron-pixel-picker"
+  },
+  "homepage": "https://caldis.github.io/electron-pixel-picker",
+  "peerDependencies": {
+    "electron": ">=20.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "electron": "^28.0.0"
+  }
+}
