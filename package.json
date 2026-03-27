@@ -1,6 +1,6 @@
 {
   "name": "electron-pixel-picker",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Zero-dependency screen color picker for Electron. Fullscreen overlay with pixel-grid magnifier, scroll-to-zoom, and hex color output.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
