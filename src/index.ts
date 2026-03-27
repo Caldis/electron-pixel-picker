@@ -26,8 +26,8 @@
  */
 
 import { app, BrowserWindow, desktopCapturer, ipcMain, screen } from 'electron';
-import * as path from 'path';
-import * as fs from 'fs';
+import { join } from 'path';
+import { mkdirSync, writeFileSync } from 'fs';
 
 // ---------------------------------------------------------------------------
 // Inlined assets — avoids __dirname / file-path issues when bundled
@@ -240,14 +240,14 @@ let _htmlPath: string | null = null;
 function ensureAssets(): { preload: string; html: string } {
   if (_preloadPath && _htmlPath) return { preload: _preloadPath, html: _htmlPath };
 
-  _assetDir = path.join(app.getPath('temp'), 'electron-pixel-picker');
-  fs.mkdirSync(_assetDir, { recursive: true });
+  _assetDir = join(app.getPath('temp'), 'electron-pixel-picker');
+  mkdirSync(_assetDir, { recursive: true });
 
-  _preloadPath = path.join(_assetDir, 'preload.js');
-  _htmlPath = path.join(_assetDir, 'overlay.html');
+  _preloadPath = join(_assetDir, 'preload.js');
+  _htmlPath = join(_assetDir, 'overlay.html');
 
-  fs.writeFileSync(_preloadPath, PRELOAD_JS, 'utf-8');
-  fs.writeFileSync(_htmlPath, OVERLAY_HTML, 'utf-8');
+  writeFileSync(_preloadPath, PRELOAD_JS, 'utf-8');
+  writeFileSync(_htmlPath, OVERLAY_HTML, 'utf-8');
 
   return { preload: _preloadPath, html: _htmlPath };
 }
