@@ -8,6 +8,10 @@
  * Works on Windows, macOS, and Linux.
  * Uses only Electron built-in APIs — no native modules, no extra dependencies.
  *
+ * Assets (overlay HTML + preload JS) are inlined so the package works correctly
+ * when bundled by Vite, Rollup, Webpack, or any other bundler that transforms
+ * __dirname.
+ *
  * @example
  * ```ts
  * // main.ts
@@ -21,8 +25,236 @@
  * @packageDocumentation
  */
 
-import { BrowserWindow, desktopCapturer, ipcMain, screen } from 'electron';
+import { app, BrowserWindow, desktopCapturer, ipcMain, screen } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
+
+// ---------------------------------------------------------------------------
+// Inlined assets — avoids __dirname / file-path issues when bundled
+// ---------------------------------------------------------------------------
+
+const PRELOAD_JS = `
+const { contextBridge, ipcRenderer } = require('electron');
+contextBridge.exposeInMainWorld('colorPickerAPI', {
+  onScreenshotData: (cb) => {
+    ipcRenderer.on('screenshot-data', (_ev, dataUrl, w, h) => cb(dataUrl, w, h));
+  },
+  sendColorPicked: (hex) => {
+    ipcRenderer.send('color-picked', hex);
+  },
+});
+`;
+
+const OVERLAY_HTML = `<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { margin: 0; padding: 0; cursor: none; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: transparent; }
+  #canvas-source {
+    position: fixed; top: 0; left: 0;
+    width: 100vw; height: 100vh;
+    object-fit: cover;
+  }
+  #magnifier {
+    position: fixed;
+    pointer-events: none;
+    border-radius: 50%;
+    overflow: hidden;
+    border: 3px solid rgba(255,255,255,0.9);
+    box-shadow: 0 0 0 1px rgba(0,0,0,0.3), 0 4px 20px rgba(0,0,0,0.4);
+    z-index: 10;
+  }
+  #magnifier canvas {
+    display: block;
+    border-radius: 50%;
+  }
+  #color-label {
+    position: fixed;
+    pointer-events: none;
+    padding: 4px 10px;
+    border-radius: 4px;
+    font-family: 'Cascadia Code', 'Consolas', 'SF Mono', monospace;
+    font-size: 12px;
+    font-weight: 600;
+    color: #fff;
+    background: rgba(0,0,0,0.75);
+    backdrop-filter: blur(4px);
+    z-index: 11;
+    white-space: nowrap;
+  }
+</style>
+</head>
+<body>
+  <canvas id="canvas-source"></canvas>
+  <div id="magnifier"><canvas id="canvas-mag"></canvas></div>
+  <div id="color-label"></div>
+
+<script>
+  var MAG_DISPLAY_SIZE = 140;
+  var GRID_MIN = 5;
+  var GRID_MAX = 141;
+  var gridCount = 13;
+
+  var sourceCanvas = document.getElementById('canvas-source');
+  var sourceCtx = sourceCanvas.getContext('2d');
+  var magDiv = document.getElementById('magnifier');
+  var magCanvas = document.getElementById('canvas-mag');
+  var magCtx = magCanvas.getContext('2d');
+  var colorLabel = document.getElementById('color-label');
+
+  magDiv.style.width = magDiv.style.height = MAG_DISPLAY_SIZE + 'px';
+  magCanvas.width = magCanvas.height = MAG_DISPLAY_SIZE;
+  magCanvas.style.width = magCanvas.style.height = MAG_DISPLAY_SIZE + 'px';
+
+  var currentColor = '';
+  var imgLoaded = false;
+  var lastClientX = 0, lastClientY = 0;
+
+  window.colorPickerAPI.onScreenshotData(function(dataUrl) {
+    var img = new Image();
+    img.onload = function() {
+      sourceCanvas.width = img.width;
+      sourceCanvas.height = img.height;
+      sourceCtx.drawImage(img, 0, 0);
+      imgLoaded = true;
+      drawMagnifier(lastClientX, lastClientY);
+    };
+    img.src = dataUrl;
+  });
+
+  function getPixelColor(x, y) {
+    if (!imgLoaded) return '#000000';
+    var px = Math.max(0, Math.min(sourceCanvas.width - 1, x));
+    var py = Math.max(0, Math.min(sourceCanvas.height - 1, y));
+    var pixel = sourceCtx.getImageData(px, py, 1, 1).data;
+    return '#' + pixel[0].toString(16).padStart(2, '0')
+              + pixel[1].toString(16).padStart(2, '0')
+              + pixel[2].toString(16).padStart(2, '0');
+  }
+
+  function drawMagnifier(clientX, clientY) {
+    var cellSize = MAG_DISPLAY_SIZE / gridCount;
+    var half = Math.floor(gridCount / 2);
+    var totalW = MAG_DISPLAY_SIZE + 6;
+    var magX = clientX - totalW / 2;
+    var magY = clientY - totalW / 2;
+    magDiv.style.transform = 'translate(' + magX + 'px,' + magY + 'px)';
+
+    if (!imgLoaded) {
+      magCtx.fillStyle = '#222';
+      magCtx.fillRect(0, 0, MAG_DISPLAY_SIZE, MAG_DISPLAY_SIZE);
+      colorLabel.textContent = '...';
+      colorLabel.style.background = '#333';
+      colorLabel.style.color = '#fff';
+      colorLabel.style.transform = 'translate(' + (magX + totalW / 2 - 20) + 'px,' + (magY + totalW + 8) + 'px)';
+      return;
+    }
+
+    var rect = sourceCanvas.getBoundingClientRect();
+    var cx = Math.round((clientX - rect.left) / rect.width * sourceCanvas.width);
+    var cy = Math.round((clientY - rect.top) / rect.height * sourceCanvas.height);
+    var startX = Math.max(0, Math.min(sourceCanvas.width - gridCount, cx - half));
+    var startY = Math.max(0, Math.min(sourceCanvas.height - gridCount, cy - half));
+    var imageData = sourceCtx.getImageData(startX, startY, gridCount, gridCount);
+
+    currentColor = getPixelColor(cx, cy);
+
+    magCtx.clearRect(0, 0, MAG_DISPLAY_SIZE, MAG_DISPLAY_SIZE);
+    var pixels = imageData.data;
+    for (var py = 0; py < gridCount; py++) {
+      for (var px = 0; px < gridCount; px++) {
+        var i = (py * gridCount + px) * 4;
+        magCtx.fillStyle = 'rgb(' + pixels[i] + ',' + pixels[i+1] + ',' + pixels[i+2] + ')';
+        magCtx.fillRect(Math.floor(px * cellSize), Math.floor(py * cellSize),
+                        Math.ceil(cellSize), Math.ceil(cellSize));
+      }
+    }
+
+    if (cellSize >= 4) {
+      magCtx.strokeStyle = 'rgba(255,255,255,0.15)';
+      magCtx.lineWidth = 0.5;
+      for (var i = 0; i <= gridCount; i++) {
+        var pos = Math.floor(i * cellSize);
+        magCtx.beginPath(); magCtx.moveTo(pos, 0); magCtx.lineTo(pos, MAG_DISPLAY_SIZE); magCtx.stroke();
+        magCtx.beginPath(); magCtx.moveTo(0, pos); magCtx.lineTo(MAG_DISPLAY_SIZE, pos); magCtx.stroke();
+      }
+    }
+
+    var cx0 = Math.floor(half * cellSize);
+    var cy0 = Math.floor(half * cellSize);
+    var cs = Math.ceil(cellSize);
+    magCtx.strokeStyle = '#fff'; magCtx.lineWidth = 2;
+    magCtx.strokeRect(cx0, cy0, cs, cs);
+    magCtx.strokeStyle = '#000'; magCtx.lineWidth = 1;
+    magCtx.strokeRect(cx0 - 1, cy0 - 1, cs + 2, cs + 2);
+
+    colorLabel.textContent = currentColor.toUpperCase();
+    colorLabel.style.background = currentColor;
+    var r = parseInt(currentColor.slice(1,3), 16);
+    var g = parseInt(currentColor.slice(3,5), 16);
+    var b = parseInt(currentColor.slice(5,7), 16);
+    var lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    colorLabel.style.color = lum > 0.5 ? '#000' : '#fff';
+    colorLabel.style.transform = 'translate(' + (magX + totalW / 2 - 35) + 'px,' + (magY + totalW + 8) + 'px)';
+  }
+
+  document.addEventListener('mousemove', function(e) {
+    lastClientX = e.clientX; lastClientY = e.clientY;
+    drawMagnifier(e.clientX, e.clientY);
+  });
+
+  document.addEventListener('wheel', function(e) {
+    e.preventDefault();
+    var delta = e.deltaY < 0 ? -2 : 2;
+    gridCount = Math.max(GRID_MIN, Math.min(GRID_MAX, gridCount + delta));
+    if (gridCount % 2 === 0) gridCount += (delta > 0 ? 1 : -1);
+    drawMagnifier(lastClientX, lastClientY);
+  }, { passive: false });
+
+  document.addEventListener('click', function() {
+    if (!imgLoaded) return;
+    window.colorPickerAPI.sendColorPicked(currentColor);
+  });
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') window.colorPickerAPI.sendColorPicked('');
+  });
+
+  document.addEventListener('contextmenu', function(e) {
+    e.preventDefault();
+    window.colorPickerAPI.sendColorPicked('');
+  });
+</script>
+</body>
+</html>`;
+
+// ---------------------------------------------------------------------------
+// Runtime asset extraction — write inlined assets to temp once per app run
+// ---------------------------------------------------------------------------
+
+let _assetDir: string | null = null;
+let _preloadPath: string | null = null;
+let _htmlPath: string | null = null;
+
+function ensureAssets(): { preload: string; html: string } {
+  if (_preloadPath && _htmlPath) return { preload: _preloadPath, html: _htmlPath };
+
+  _assetDir = path.join(app.getPath('temp'), 'electron-pixel-picker');
+  fs.mkdirSync(_assetDir, { recursive: true });
+
+  _preloadPath = path.join(_assetDir, 'preload.js');
+  _htmlPath = path.join(_assetDir, 'overlay.html');
+
+  fs.writeFileSync(_preloadPath, PRELOAD_JS, 'utf-8');
+  fs.writeFileSync(_htmlPath, OVERLAY_HTML, 'utf-8');
+
+  return { preload: _preloadPath, html: _htmlPath };
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 /** Result returned by the color picker */
 export interface PickColorResult {
@@ -34,7 +266,6 @@ let overlayWindow: BrowserWindow | null = null;
 
 /**
  * Capture the primary display as a data URL.
- * Uses Electron's desktopCapturer with hi-DPI pixel dimensions.
  * @internal
  */
 async function captureScreen(): Promise<string> {
@@ -42,7 +273,6 @@ async function captureScreen(): Promise<string> {
   const { width, height } = primaryDisplay.size;
   const scaleFactor = primaryDisplay.scaleFactor;
 
-  // Use actual pixel dimensions for hi-DPI accuracy
   const thumbWidth = Math.round(width * scaleFactor);
   const thumbHeight = Math.round(height * scaleFactor);
 
@@ -52,27 +282,13 @@ async function captureScreen(): Promise<string> {
   });
 
   if (!sources.length) throw new Error('No screen source available');
-
-  // Use the primary display source
-  const source = sources[0];
-  return source.thumbnail.toDataURL();
+  return sources[0].thumbnail.toDataURL();
 }
 
 /**
  * Open the color picker overlay and wait for the user to pick a color.
  *
- * This is the direct API — it does NOT require IPC registration.
- * Call this from the main process when you want full control.
- *
- * @returns The picked hex color string (e.g. "#FF6600"), or empty string if cancelled (Esc / right-click).
- *
- * @example
- * ```ts
- * import { pickScreenColor } from 'electron-pixel-picker';
- *
- * const hex = await pickScreenColor();
- * if (hex) console.log('Picked:', hex);
- * ```
+ * @returns The picked hex color string (e.g. "#FF6600"), or empty string if cancelled.
  */
 export async function pickScreenColor(): Promise<string> {
   if (overlayWindow) {
@@ -80,11 +296,12 @@ export async function pickScreenColor(): Promise<string> {
     overlayWindow = null;
   }
 
+  const { preload, html } = ensureAssets();
+
   const primaryDisplay = screen.getPrimaryDisplay();
   const { width, height } = primaryDisplay.size;
   const { x, y } = primaryDisplay.bounds;
 
-  // Capture screen BEFORE showing overlay
   let screenshotDataUrl: string;
   try {
     screenshotDataUrl = await captureScreen();
@@ -94,6 +311,13 @@ export async function pickScreenColor(): Promise<string> {
   }
 
   return new Promise<string>((resolve) => {
+    let resolved = false;
+    const safeResolve = (value: string) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(value);
+    };
+
     overlayWindow = new BrowserWindow({
       x,
       y,
@@ -110,36 +334,28 @@ export async function pickScreenColor(): Promise<string> {
       webPreferences: {
         nodeIntegration: false,
         contextIsolation: true,
-        preload: path.join(__dirname, 'overlay-preload.js'),
+        preload,
       },
     });
 
     overlayWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
-
-    // Fullscreen on all platforms
     overlayWindow.setBounds({ x, y, width, height });
+    overlayWindow.loadFile(html);
 
-    // Load the overlay HTML (lives in src/ even after npm install)
-    const overlayPath = path.join(__dirname, '..', 'src', 'overlay.html');
-    overlayWindow.loadFile(overlayPath);
-
-    // Send screenshot data once overlay is ready
     overlayWindow.webContents.once('did-finish-load', () => {
       overlayWindow?.webContents.send('screenshot-data', screenshotDataUrl, width, height);
     });
 
-    // Listen for color pick result
     ipcMain.once('color-picked', (_event, colorHex: string) => {
       overlayWindow?.close();
       overlayWindow = null;
-      resolve(colorHex);
+      safeResolve(colorHex);
     });
 
-    // Handle overlay close (Esc or click outside)
     overlayWindow.once('closed', () => {
       overlayWindow = null;
       ipcMain.removeAllListeners('color-picked');
-      resolve(''); // cancelled
+      safeResolve('');
     });
   });
 }
@@ -148,22 +364,6 @@ export async function pickScreenColor(): Promise<string> {
  * Register the IPC handler `'pick-screen-color'` so renderers can invoke color picking.
  *
  * Call this once in the main process after `app.whenReady()`.
- * Renderers can then call `ipcRenderer.invoke('pick-screen-color')` (or use the
- * provided preload helper) to trigger the picker.
- *
- * @example
- * ```ts
- * // main.ts
- * import { registerPixelPicker } from 'electron-pixel-picker';
- *
- * app.whenReady().then(() => {
- *   registerPixelPicker();
- *   // ... create your windows
- * });
- *
- * // renderer (via preload)
- * const hex = await window.electronAPI.invoke('pick-screen-color');
- * ```
  */
 export function registerPixelPicker(): void {
   ipcMain.handle('pick-screen-color', async () => {
